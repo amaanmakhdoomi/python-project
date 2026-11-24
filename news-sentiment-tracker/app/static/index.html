@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Election Pulse — Sentiment &amp; Win-Chance Tracker</title>
+  <meta name="description" content="Automated political news sentiment and win-chance tracker." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(1100px 500px at 12% -10%, rgba(56, 189, 248, 0.13), transparent 60%),
+        radial-gradient(900px 480px at 92% 0%, rgba(251, 113, 133, 0.11), transparent 55%),
+        #070b14;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(20, 29, 46, 0.92), rgba(13, 20, 34, 0.92));
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      box-shadow: 0 18px 50px -24px rgba(2, 6, 23, 0.9);
+      backdrop-filter: blur(10px);
+    }
+    .glow-a { box-shadow: 0 0 40px -12px rgba(56, 189, 248, 0.55); }
+    .glow-b { box-shadow: 0 0 40px -12px rgba(251, 113, 133, 0.55); }
+    .split-bar { transition: width 900ms cubic-bezier(.22, 1, .36, 1); }
+    .ticker-dot {
+      width: 7px; height: 7px; border-radius: 9999px;
+      box-shadow: 0 0 0 0 currentColor;
+      animation: pulse-ring 2.2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 currentColor; }
+      70% { box-shadow: 0 0 0 7px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+    .fade-in { animation: fade-in 420ms ease both; }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, rgba(148,163,184,.08) 25%, rgba(148,163,184,.16) 37%, rgba(148,163,184,.08) 63%);
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 100% 50%; }
+      100% { background-position: 0 50%; }
+    }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #26344d; border-radius: 8px; border: 2px solid #0b1220; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    .article-link:hover .article-title { color: #7dd3fc; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 antialiased">
+  <div class="mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
+
+    <!-- Header -->
+    <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <div class="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-sky-400/25 bg-sky-400/10">
+          <svg class="h-6 w-6 text-sky-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 13h3l2.5-6 4 12 2.5-6H21" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-extrabold tracking-tight sm:text-2xl">Election Pulse</h1>
+            <span class="rounded-full border border-slate-600/50 bg-slate-800/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-slate-300">MVP</span>
+          </div>
+          <p class="text-sm text-slate-400">Automated news sentiment &amp; win-chance tracker</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <div id="lastRunPill" class="flex items-center gap-2 rounded-full border border-slate-700/70 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-400">
+          <span class="ticker-dot text-emerald-400"></span>
+          <span id="lastRunText">Connecting…</span>
+        </div>
+        <button id="refreshBtn" type="button" class="group inline-flex items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3.5 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60">
+          <svg id="refreshIcon" class="h-4 w-4 transition group-hover:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+          </svg>
+          <span id="refreshLabel">Refresh now</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Disclaimer -->
+    <div class="mb-5 flex items-start gap-2.5 rounded-xl border border-amber-400/20 bg-amber-400/[0.06] px-3.5 py-2.5 text-xs leading-relaxed text-amber-200/80">
+      <svg class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      </svg>
+      <p id="disclaimer">These percentages reflect media sentiment momentum, not scientific voter polling.</p>
+    </div>
+
+    <!-- Hero score card -->
+    <section class="card fade-in relative overflow-hidden rounded-3xl p-5 sm:p-7">
+      <div class="pointer-events-none absolute -left-24 -top-28 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl"></div>
+      <div class="pointer-events-none absolute -bottom-32 -right-24 h-64 w-64 rounded-full bg-rose-500/10 blur-3xl"></div>
+
+      <div class="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          <span class="ticker-dot text-emerald-400"></span>
+          Live media-sentiment projection
+        </div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+          <span>Window: <span id="windowLabel" class="font-semibold text-slate-200">7 days</span></span>
+          <span>Articles: <span id="articleCount" class="font-semibold text-slate-200">—</span></span>
+          <span>Updated: <span id="updatedAt" class="font-semibold text-slate-200">—</span></span>
+        </div>
+      </div>
+
+      <div class="relative mt-6 grid grid-cols-2 gap-4 sm:gap-8">
+        <div class="glow-a rounded-2xl border border-sky-400/15 bg-sky-400/[0.05] p-4 sm:p-5">
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-sky-400"></span>
+            <h2 id="partyAName" class="truncate text-sm font-semibold text-sky-200 sm:text-base">Party A</h2>
+          </div>
+          <div class="mt-2 flex items-end gap-2">
+            <span id="partyAPct" class="text-4xl font-extrabold tracking-tight text-white sm:text-6xl">—</span>
+            <span class="pb-1 text-sm text-sky-300/70 sm:pb-2">win chance</span>
+          </div>
+          <div class="mt-2 flex items-center gap-2 text-xs text-slate-400">
+            <span id="partyAStance" class="rounded-md bg-slate-800/70 px-1.5 py-0.5 font-medium text-slate-300">—</span>
+            <span>net sentiment <span id="partyAScore" class="font-semibold text-slate-300">—</span></span>
+          </div>
+        </div>
+
+        <div class="glow-b rounded-2xl border border-rose-400/15 bg-rose-400/[0.05] p-4 text-right sm:p-5">
+          <div class="flex items-center justify-end gap-2">
+            <h2 id="partyBName" class="truncate text-sm font-semibold text-rose-200 sm:text-base">Party B</h2>
+            <span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span>
+          </div>
+          <div class="mt-2 flex items-end justify-end gap-2">
+            <span class="pb-1 text-sm text-rose-300/70 sm:pb-2">win chance</span>
+            <span id="partyBPct" class="text-4xl font-extrabold tracking-tight text-white sm:text-6xl">—</span>
+          </div>
+          <div class="mt-2 flex items-center justify-end gap-2 text-xs text-slate-400">
+            <span>net sentiment <span id="partyBScore" class="font-semibold text-slate-300">—</span></span>
+            <span id="partyBStance" class="rounded-md bg-slate-800/70 px-1.5 py-0.5 font-medium text-slate-300">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="relative mt-5">
+        <div class="h-4 w-full overflow-hidden rounded-full border border-slate-700/60 bg-slate-800/70">
+          <div class="flex h-full w-full">
+            <div id="barA" class="split-bar h-full bg-gradient-to-r from-sky-500 to-cyan-300" style="width: 50%"></div>
+            <div id="barB" class="split-bar h-full bg-gradient-to-r from-rose-400 to-rose-500" style="width: 50%"></div>
+          </div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+          <span id="barALabel">Party A 50%</span>
+          <span id="deltaLabel" class="rounded-full border border-slate-700/60 bg-slate-900/50 px-2 py-0.5 font-medium text-slate-400">Δ 0.00</span>
+          <span id="barBLabel">Party B 50%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Trend + drivers -->
+    <section class="mt-5 grid gap-5 lg:grid-cols-5">
+      <div class="card fade-in flex flex-col rounded-3xl p-5 lg:col-span-3">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Win-chance trend</h2>
+            <p class="mt-0.5 text-xs text-slate-500">Historical snapshots from every automated update</p>
+          </div>
+          <div class="flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-900/50 p-1 text-[11px] font-semibold">
+            <button type="button" data-history-days="7" class="history-btn rounded-md px-2 py-1 text-slate-400 transition hover:text-slate-200">7d</button>
+            <button type="button" data-history-days="30" class="history-btn rounded-md bg-slate-700/70 px-2 py-1 text-slate-100">30d</button>
+            <button type="button" data-history-days="90" class="history-btn rounded-md px-2 py-1 text-slate-400 transition hover:text-slate-200">90d</button>
+          </div>
+        </div>
+        <div class="relative min-h-[320px] flex-1">
+          <canvas id="trendChart" aria-label="Win-chance trend chart" role="img"></canvas>
+          <div id="chartEmpty" class="absolute inset-0 hidden items-center justify-center rounded-xl border border-dashed border-slate-700/60 bg-slate-900/30 text-center text-xs text-slate-500">
+            <div class="px-6">
+              <p class="font-semibold text-slate-400">No history yet</p>
+              <p class="mt-1">Snapshots appear here after each update.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card fade-in rounded-3xl p-5 lg:col-span-2">
+        <div class="mb-4">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Key drivers</h2>
+          <p class="mt-0.5 text-xs text-slate-500">Highest-impact coverage in the window</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <div class="mb-2 flex items-center gap-2 text-xs font-semibold text-sky-300">
+              <span class="h-2 w-2 rounded-full bg-sky-400"></span>
+              <span id="driversAName">Party A</span>
+            </div>
+            <ul id="driversA" class="space-y-2.5">
+              <li class="skeleton h-12 rounded-lg"></li>
+              <li class="skeleton h-12 rounded-lg"></li>
+            </ul>
+          </div>
+          <div>
+            <div class="mb-2 flex items-center gap-2 text-xs font-semibold text-rose-300">
+              <span class="h-2 w-2 rounded-full bg-rose-400"></span>
+              <span id="driversBName">Party B</span>
+            </div>
+            <ul id="driversB" class="space-y-2.5">
+              <li class="skeleton h-12 rounded-lg"></li>
+              <li class="skeleton h-12 rounded-lg"></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Evidence feed -->
+    <section class="mt-8">
+      <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 class="text-lg font-bold tracking-tight text-slate-100">The evidence</h2>
+          <p class="text-sm text-slate-500">Every classified article behind the numbers, with the reason it moved the needle.</p>
+        </div>
+        <div class="text-xs text-slate-500">
+          <span id="feedMeta">—</span>
+        </div>
+      </div>
+
+      <div class="grid gap-5 lg:grid-cols-2">
+        <!-- Party A feed -->
+        <div class="card rounded-3xl p-5">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-sky-400"></span>
+              <h3 id="feedAName" class="text-sm font-bold text-sky-200">Party A</h3>
+              <span id="feedACount" class="rounded-full bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold text-sky-300">0</span>
+            </div>
+            <div class="flex gap-1 rounded-lg border border-slate-700/60 bg-slate-900/50 p-1 text-[11px] font-semibold" data-feed-tabs="A">
+              <button type="button" data-stance="all" class="rounded-md bg-slate-700/70 px-2 py-1 text-slate-100">All</button>
+              <button type="button" data-stance="for" class="rounded-md px-2 py-1 text-emerald-300/80 hover:text-emerald-200">For</button>
+              <button type="button" data-stance="against" class="rounded-md px-2 py-1 text-rose-300/80 hover:text-rose-200">Against</button>
+            </div>
+          </div>
+          <div id="feedA" class="space-y-3">
+            <div class="skeleton h-24 rounded-xl"></div>
+            <div class="skeleton h-24 rounded-xl"></div>
+          </div>
+        </div>
+
+        <!-- Party B feed -->
+        <div class="card rounded-3xl p-5">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+              <span class="h-2.5 w-2.5 rounded-full bg-rose-400"></span>
+              <h3 id="feedBName" class="text-sm font-bold text-rose-200">Party B</h3>
+              <span id="feedBCount" class="rounded-full bg-rose-400/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300">0</span>
+            </div>
+            <div class="flex gap-1 rounded-lg border border-slate-700/60 bg-slate-900/50 p-1 text-[11px] font-semibold" data-feed-tabs="B">
+              <button type="button" data-stance="all" class="rounded-md bg-slate-700/70 px-2 py-1 text-slate-100">All</button>
+              <button type="button" data-stance="for" class="rounded-md px-2 py-1 text-emerald-300/80 hover:text-emerald-200">For</button>
+              <button type="button" data-stance="against" class="rounded-md px-2 py-1 text-rose-300/80 hover:text-rose-200">Against</button>
+            </div>
+          </div>
+          <div id="feedB" class="space-y-3">
+            <div class="skeleton h-24 rounded-xl"></div>
+            <div class="skeleton h-24 rounded-xl"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mt-10 flex flex-col items-center justify-between gap-2 border-t border-slate-800/80 pt-5 text-[11px] text-slate-500 sm:flex-row">
+      <p>Election Pulse · automated media-sentiment tracker</p>
+      <p id="footerMeta">Sentiment engine: lexicon</p>
+    </footer>
+  </div>
+
+  <div id="toast" class="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 translate-y-3 rounded-xl border border-slate-600/60 bg-slate-900/95 px-4 py-2.5 text-sm text-slate-100 opacity-0 shadow-2xl transition-all duration-300"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
